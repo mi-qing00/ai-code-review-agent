@@ -65,12 +65,27 @@ GitHub Webhook → FastAPI → Redis Queue → Worker Pool → GitHub
 - ✅ Services automatically managed on startup
 
 ### Week 2: Webhook Integration
-- [ ] GitHub webhook endpoint (`POST /webhooks/github`)
-- [ ] Signature verification (HMAC SHA-256)
-- [ ] Parse PR payloads
-- [ ] Store PR metadata in PostgreSQL
+- [x] GitHub webhook endpoint (`POST /webhooks/github`)
+  - ✅ Endpoint created at `/webhooks/github`
+  - ✅ Handles POST requests with proper headers
+- [x] Signature verification (HMAC SHA-256)
+  - ✅ HMAC SHA-256 verification implemented
+  - ✅ Constant-time comparison to prevent timing attacks
+  - ✅ Optional verification for development
+- [x] Parse PR payloads
+  - ✅ Extracts PR number, repository name, action
+  - ✅ Handles pull_request events (opened, synchronize, reopened)
+  - ✅ Validates payload structure
+- [x] Store PR metadata in PostgreSQL
+  - ✅ Stores new PRs in database
+  - ✅ Updates existing PRs on subsequent events
+  - ✅ Uses asyncpg for async database operations
+  - ✅ Comprehensive error handling
 
-**Deliverable:** Endpoint receives webhooks and stores data
+**Progress:** 100% complete ✅
+**Deliverable:** Endpoint receives webhooks and stores data ✅
+- ✅ GitHub App successfully configured and receiving events
+- ✅ FastAPI endpoint working and processing webhooks
 
 ### Week 3: Job Queue
 - [ ] Redis Streams producer (enqueue jobs)
@@ -392,22 +407,29 @@ respx = "^0.20.0"  # HTTP mocking
 **最后更新:** 2025-11-03
 
 ### 已完成 ✅
-- Week 1: Foundation (95% 完成)
+- Week 1: Foundation (100% 完成)
   - ✅ Project setup (Poetry, FastAPI, Docker)
   - ✅ PostgreSQL schema and migrations
   - ✅ Database and Redis connection modules
   - ✅ Environment configuration
   - ✅ Git repository and GitHub push
-  - ⚠️ Database connection issue on startup (needs Docker services)
+  - ✅ Docker Compose integration in startup scripts
+- Week 2: Webhook Integration (100% 完成)
+  - ✅ GitHub webhook endpoint created
+  - ✅ Signature verification implemented
+  - ✅ PR payload parsing and validation
+  - ✅ Database storage for PR metadata
+  - ✅ GitHub App successfully configured
+  - ✅ Endpoint receiving and processing events
 
 ### 进行中 🔄
-- Week 1: Fixing database connection issue
+- Week 3: Job Queue (准备开始)
 
 ### 待开始 📋
-- Week 2-12: All remaining tasks
+- Week 3-12: Remaining tasks
   - See detailed progress in `PROGRESS.md`
 
-**总体完成度:** ~8% (Week 1 mostly complete, Week 2-12 not started)
+**总体完成度:** ~17% (Week 1-2 complete, Week 3-12 not started)
 
 ---
 

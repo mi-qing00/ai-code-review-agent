@@ -4,8 +4,9 @@
 
 ## 📊 总体进度
 
-**Week 1 完成度:** 95% 
-**总体完成度:** ~8% (Week 1 完成，Week 2-12 未开始)
+**Week 1 完成度:** 100% ✅
+**Week 2 完成度:** 100% ✅
+**总体完成度:** ~17% (Week 1-2 完成，Week 3-12 未开始)
 
 ---
 
@@ -120,11 +121,29 @@
   - [x] 创建启动脚本自动管理 Docker 服务
   - [x] 测试连接功能
 
-### Week 2: Webhook Integration (0%)
-- [ ] GitHub webhook endpoint (`POST /webhooks/github`)
-- [ ] Signature verification (HMAC SHA-256)
-- [ ] Parse PR payloads
-- [ ] Store PR metadata in PostgreSQL
+### Week 2: Webhook Integration (100% ✅)
+- [x] GitHub webhook endpoint (`POST /webhooks/github`) ✅
+  - Endpoint created and registered in FastAPI
+  - Handles POST requests with proper headers
+  - Returns appropriate JSON responses
+- [x] Signature verification (HMAC SHA-256) ✅
+  - HMAC SHA-256 verification implemented
+  - Constant-time comparison (`hmac.compare_digest`) to prevent timing attacks
+  - Optional verification for development (when secret not configured)
+- [x] Parse PR payloads ✅
+  - Extracts PR number, repository name, action type
+  - Handles pull_request events: opened, synchronize, reopened
+  - Validates payload structure with proper error handling
+- [x] Store PR metadata in PostgreSQL ✅
+  - Stores new PRs in database
+  - Updates existing PRs on subsequent webhook events
+  - Uses asyncpg for async database operations
+  - Comprehensive error handling and logging
+  - Tested and verified working
+- [x] GitHub App successfully configured ✅
+  - Webhook endpoint receiving events from GitHub
+  - Ping events handled correctly
+  - PR events successfully processed and stored
 
 ### Week 3: Job Queue (0%)
 - [ ] Redis Streams producer (enqueue jobs)
@@ -147,15 +166,15 @@
 ## 🎯 下一步行动
 
 ### 立即优先级
-1. **修复数据库连接问题**
-   - 检查 Docker 服务状态
-   - 添加连接重试机制
-   - 测试应用启动
+1. ✅ **Week 2: Webhook Integration** - 已完成
+   - ✅ Webhook 端点已创建并测试
+   - ✅ GitHub App 已成功配置
+   - ✅ 端点正在接收和处理 GitHub 事件
 
-2. **开始 Week 2: Webhook Integration**
-   - 创建 webhook 端点
-   - 实现签名验证
-   - 测试 webhook 接收
+2. **开始 Week 3: Job Queue**
+   - 实现 Redis Streams producer
+   - 创建 worker 消费者
+   - 实现任务状态跟踪
 
 ### 短期目标 (Week 1-2)
 - 完成 Week 1 的所有任务
@@ -177,10 +196,11 @@
 - **测试覆盖率:** 0% (待开始)
 
 ### 功能完成度
-- **基础设施:** 95%
-- **核心功能:** 0%
-- **测试:** 0%
-- **文档:** 60%
+- **基础设施:** 100% ✅
+- **Webhook 集成:** 100% ✅
+- **核心功能:** 17% (webhook 完成，队列和 LLM 待开发)
+- **测试:** 10% (webhook 单元测试完成)
+- **文档:** 65%
 
 ---
 
