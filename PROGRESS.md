@@ -86,36 +86,39 @@
 
 ## ⚠️ 已知问题
 
-### 1. 数据库连接问题
-**状态:** 需要修复  
+### 1. 数据库连接问题 ✅ 已解决
+**状态:** 已修复  
 **描述:** 应用启动时无法连接到 PostgreSQL  
-**错误信息:** `ConnectionRefusedError: [Errno 61] Connection refused`  
-**可能原因:**
-- Docker 服务未运行
-- 数据库连接字符串配置错误
-- 数据库服务未完全启动
-
 **解决方案:**
+- ✅ 添加了连接重试逻辑（5 次重试，每次间隔 2 秒）
+- ✅ 创建了启动脚本自动管理 Docker Compose 服务
+- ✅ `start.sh` 现在会自动启动并等待 Docker 服务就绪
+- ✅ 新增 `scripts/start-dev.sh` 提供完整的开发环境设置
+
+**使用方法:**
 ```bash
-# 确保 Docker 服务运行
-docker-compose up -d
+# 推荐方式：自动启动 Docker 服务
+./scripts/start-dev.sh
 
-# 检查服务状态
-docker-compose ps
-
-# 验证数据库连接
-docker exec -i code_review_postgres psql -U user -d code_review_db -c "SELECT 1;"
+# 或使用简单启动脚本
+./start.sh
 ```
+
+**验证:**
+- ✅ 数据库连接测试通过
+- ✅ Redis 连接测试通过
+- ✅ Docker 服务健康检查通过
 
 ---
 
 ## 📋 待完成的工作
 
-### Week 1 剩余任务 (5%)
-- [ ] 修复数据库连接问题
-  - 确保 Docker 服务启动时数据库已就绪
-  - 添加连接重试逻辑
-  - 改进错误处理
+### Week 1 剩余任务 (0%)
+- [x] 修复数据库连接问题 ✅
+  - [x] 添加连接重试逻辑
+  - [x] 改进错误处理
+  - [x] 创建启动脚本自动管理 Docker 服务
+  - [x] 测试连接功能
 
 ### Week 2: Webhook Integration (0%)
 - [ ] GitHub webhook endpoint (`POST /webhooks/github`)
