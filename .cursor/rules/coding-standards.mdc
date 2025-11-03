@@ -1,0 +1,206 @@
+---
+description: Core coding standards emphasizing research, confirmation, and careful implementation
+globs:
+  - "**/*.{js,ts,jsx,tsx,py,java,go,rs}"
+alwaysApply: true
+---
+
+# Core Engineering Principles
+
+## 1. Research Over Assumption (以认真查阅为荣)
+
+**NEVER guess API signatures, method names, or interfaces.**
+
+Before implementing:
+- Search official documentation first
+- Check existing codebase for similar patterns
+- Verify library versions and compatibility
+- Ask for clarification if documentation is unclear
+
+Example of what to do:
+```
+// ❌ BAD: Assuming API exists
+const data = await api.fetchUserData(userId);
+
+// ✅ GOOD: Verified from documentation
+// Checked docs: https://api-docs.example.com/users#get
+const data = await api.users.get({ id: userId });
+```
+
+## 2. Explicit Confirmation (以寻求确认为荣)
+
+**NEVER proceed with ambiguous requirements.**
+
+When uncertain about:
+- Implementation approach or architecture
+- Expected behavior or edge cases
+- Data structures or API contracts
+- User intent or business logic
+
+Always ask:
+- "Should this handle [edge case]?"
+- "What's the expected behavior when [scenario]?"
+- "Are we using [library X] or [library Y] for this?"
+
+## 3. Business Logic Validation (以人类确认为荣)
+
+**NEVER invent business rules or domain logic.**
+
+Business logic includes:
+- Calculation formulas
+- Validation rules
+- Workflow states and transitions
+- Authorization policies
+- Data retention policies
+
+Always confirm:
+```
+// ❌ BAD: Assuming discount calculation
+const discount = price * 0.1; // Guessing 10%
+
+// ✅ GOOD: Confirmed business rule
+// [CONFIRMED: Discount is 15% for premium users, 10% for standard]
+const discount = user.isPremium ? price * 0.15 : price * 0.10;
+```
+
+## 4. Reuse Before Create (以复用现有为荣)
+
+**NEVER create new interfaces, types, or utilities without checking for existing ones.**
+
+Search order:
+1. Check current file for similar patterns
+2. Search project codebase (grep/search across files)
+3. Check common utility directories (/utils, /lib, /helpers)
+4. Verify no similar function exists in dependencies
+
+If creating new code:
+```
+// ✅ Document why existing solutions don't work
+// Created new utility because:
+// - Built-in Array.filter doesn't support async predicates
+// - lodash's filter is synchronous only
+// - Our use case requires Promise.all pattern
+async function asyncFilter(array, predicate) { ... }
+```
+
+## 5. Test Proactively (以主动测试为荣)
+
+**NEVER skip validation and testing.**
+
+For every change:
+- Add test cases covering happy path and edge cases
+- Test error handling (null, undefined, empty arrays)
+- Verify boundary conditions
+- Check performance implications for large datasets
+
+Required test coverage:
+```typescript
+// ✅ GOOD: Comprehensive test cases
+describe('calculateTotal', () => {
+  it('should handle empty cart', () => { ... });
+  it('should apply discount correctly', () => { ... });
+  it('should throw on negative prices', () => { ... });
+  it('should handle large quantities', () => { ... });
+});
+```
+
+## 6. Respect Architecture (以遵循规范为荣)
+
+**NEVER violate established patterns or architectural decisions.**
+
+Before implementing:
+- Review existing architecture documentation
+- Check for established design patterns in codebase
+- Follow naming conventions and file structure
+- Respect layer boundaries (no direct DB calls from UI)
+
+Architectural checks:
+- Does this follow the project's layering (e.g., MVC, Clean Architecture)?
+- Am I introducing new dependencies appropriately?
+- Does this maintain separation of concerns?
+- Am I following the established error handling pattern?
+
+## 7. Honest Uncertainty (以诚实无知为荣)
+
+**NEVER pretend to understand or implement without full comprehension.**
+
+When you don't understand:
+- Say explicitly: "I'm not certain about [X]"
+- Propose research approach: "Let me check [documentation/codebase]"
+- Suggest alternatives: "I can implement [simpler approach] while you clarify [complex part]"
+
+Better responses:
+```
+❌ "I'll implement the OAuth flow now"
+✅ "I'm not familiar with this project's OAuth implementation. 
+    Should I check @auth/oauth-config.ts first, or do you have 
+    specific requirements?"
+```
+
+## 8. Cautious Refactoring (以谨慎重构为荣)
+
+**NEVER make large-scale changes without safety checks.**
+
+Refactoring checklist:
+- [ ] All tests pass before refactoring
+- [ ] Changes are incremental and reviewable
+- [ ] Backward compatibility maintained (or migration path provided)
+- [ ] Performance implications considered
+- [ ] Dependencies and side effects identified
+
+Safe refactoring pattern:
+```typescript
+// ✅ GOOD: Incremental with deprecation
+// @deprecated Use calculateOrderTotal() instead
+// Will be removed in v2.0
+export function calcTotal(order: Order): number {
+  return calculateOrderTotal(order);
+}
+
+export function calculateOrderTotal(order: Order): number {
+  // New implementation with better validation
+}
+```
+
+---
+
+# Code Quality Standards
+
+## Error Handling
+- Always use try-catch for async operations
+- Never swallow errors silently
+- Provide meaningful error messages
+- Log errors with context
+
+## Null Safety
+- Check for null/undefined before accessing properties
+- Use optional chaining (?.) and nullish coalescing (??)
+- Never assume data exists without validation
+
+## Code Comments
+- Explain WHY, not WHAT (code should be self-documenting)
+- Document non-obvious logic or workarounds
+- Include links to relevant issues/docs
+- Use TODO/FIXME/HACK tags appropriately
+
+## Security
+- Never commit secrets or API keys
+- Validate and sanitize all user inputs
+- Use parameterized queries (no SQL injection)
+- Implement proper authentication checks
+
+---
+
+# Before Committing Any Code
+
+Ask yourself:
+1. Did I check documentation instead of guessing?
+2. Did I confirm ambiguous requirements?
+3. Did I validate business logic with the team?
+4. Did I search for existing implementations?
+5. Did I write and run tests?
+6. Did I follow the project's architecture?
+7. Did I admit when I was uncertain?
+8. Did I refactor carefully and incrementally?
+
+**If any answer is "No", stop and address it.**
