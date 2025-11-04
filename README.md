@@ -109,9 +109,10 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 The API will be available at `http://localhost:8000`
 
-- API docs: `http://localhost:8000/docs`
-- Health check: `http://localhost:8000/health`
-- Queue metrics: `http://localhost:8000/api/metrics`
+- **API docs:** `http://localhost:8000/docs`
+- **Health check:** `http://localhost:8000/health`
+- **Admin Dashboard:** `http://localhost:8000/api/admin/dashboard` 🎯
+- **Queue metrics:** `http://localhost:8000/api/metrics`
 
 ### 6. Start the Worker (for processing jobs)
 

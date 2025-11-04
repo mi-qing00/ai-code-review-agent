@@ -18,7 +18,7 @@ STREAM_NAME = "review_jobs"
 CONSUMER_GROUP = "review_workers"
 
 
-@router.get("/dashboard", response_class=HTMLResponse)
+@router.get("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard():
     """Admin dashboard HTML page."""
     html = """
@@ -123,7 +123,7 @@ async def admin_dashboard():
     </head>
     <body>
         <div class="container">
-            <h1>🚀 AI Code Review Agent - Admin Dashboard</h1>
+            <h1>AI Code Review Agent - Admin Dashboard</h1>
             <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
             
             <div class="stats-grid" id="stats"></div>
