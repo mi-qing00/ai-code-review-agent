@@ -159,15 +159,44 @@ async def consume_jobs() -> None:
     try:
         while not shutdown_requested:
             try:
-                # Read from stream using XREADGROUP
-                # Block for up to BLOCK_TIME milliseconds
+                # Read messages from stream using XREADGROUP
+                # Use ">" to read new messages, or "0" to read from beginning
+                # We prefer ">" for new messages, but also handle existing ones
                 messages = await redis.xreadgroup(
                     CONSUMER_GROUP,
                     CONSUMER_NAME,
-                    {STREAM_NAME: ">"},  # Read pending messages for this consumer
+                    {STREAM_NAME: ">"},  # Read new messages (not yet delivered to any consumer)
                     count=1,
                     block=BLOCK_TIME,
                 )
+                
+                # If no new messages, check for pending messages for this consumer
+                if not messages:
+                    try:
+                        pending = await redis.xpending_range(
+                            STREAM_NAME,
+                            CONSUMER_GROUP,
+                            min="-",
+                            max="+",
+                            count=10,
+                            consumername=CONSUMER_NAME,
+                        )
+                        if pending:
+                            logger.info(f"Found {len(pending)} pending messages, claiming them...")
+                            # Claim pending messages
+                            pending_ids = [msg["message_id"] for msg in pending]
+                            claimed = await redis.xclaim(
+                                STREAM_NAME,
+                                CONSUMER_GROUP,
+                                CONSUMER_NAME,
+                                min_idle_time=0,
+                                message_ids=pending_ids,
+                            )
+                            if claimed:
+                                # Convert claimed messages to same format as xreadgroup
+                                messages = [(STREAM_NAME, claimed)]
+                    except Exception as e:
+                        logger.debug(f"No pending messages or error checking pending: {e}")
                 
                 if not messages:
                     # No messages, continue waiting
