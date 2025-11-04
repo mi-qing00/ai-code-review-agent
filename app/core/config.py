@@ -125,7 +125,7 @@ class Settings(BaseSettings):
                     f"Check GITHUB_APP_PRIVATE_KEY_PATH setting."
                 )
 
-            with open(key_path, "r") as f:
+            with open(key_path, "r", encoding="utf-8") as f:
                 return f.read()
 
         raise ValueError(
