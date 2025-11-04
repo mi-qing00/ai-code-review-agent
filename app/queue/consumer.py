@@ -34,12 +34,22 @@ async def process_job(job_data: JobData) -> bool:
     """
     Process a single review job.
     
+    This function:
+    1. Fetches PR diff from GitHub
+    2. Analyzes diff with LLM
+    3. Posts review comments to GitHub
+    4. Updates job status
+    
     Args:
         job_data: Job data from queue
         
     Returns:
         True if successful, False if failed
     """
+    from app.github.client import GitHubClient
+    from app.llm.factory import get_llm_provider
+
+    github_client = None
     try:
         logger.info(
             f"Processing job {job_data.job_id} for PR #{job_data.pr_number} "
@@ -54,9 +64,65 @@ async def process_job(job_data: JobData) -> bool:
             processing_started_at=datetime.now(UTC),
         )
         
-        # TODO: Implement actual PR review logic (Week 4)
-        # For now, just log that we're processing
-        await asyncio.sleep(1)  # Simulate processing time
+        # Initialize GitHub client (use App auth if available, otherwise fallback to PAT)
+        from app.core.config import settings
+
+        if (
+            settings.github_app_id
+            and settings.github_app_private_key_path
+            and settings.github_app_installation_id
+        ):
+            github_client = GitHubClient(
+                app_id=settings.github_app_id,
+                private_key_path=settings.github_app_private_key_path,
+                installation_id=settings.github_app_installation_id,
+            )
+        else:
+            logger.warning(
+                "GitHub App credentials not configured, using PAT (not recommended)"
+            )
+            github_client = GitHubClient(token=settings.github_token)
+        
+        # Step 1: Fetch PR diff from GitHub
+        logger.info(f"Fetching diff for PR #{job_data.pr_number} from {job_data.repo_full_name}")
+        diff_context = await github_client.fetch_pr_diff(
+            repo_full_name=job_data.repo_full_name,
+            pr_number=job_data.pr_number,
+        )
+        logger.info(
+            f"Fetched diff: {len(diff_context.changed_files)} files changed, "
+            f"{diff_context.additions} additions, {diff_context.deletions} deletions"
+        )
+        
+        # Step 2: Get LLM provider
+        llm_provider = get_llm_provider()
+        logger.info(f"Using LLM provider: {llm_provider.provider_name} ({llm_provider.model})")
+        
+        # Step 3: Analyze diff with LLM
+        logger.info("Analyzing diff with LLM...")
+        review_result = await llm_provider.analyze_diff(
+            diff_text=diff_context.diff_text,
+            context=diff_context,
+        )
+        logger.info(
+            f"LLM analysis completed: {len(review_result.comments)} comments, "
+            f"{review_result.tokens_used} tokens, ${review_result.cost:.4f} cost, "
+            f"{review_result.processing_time:.2f}s"
+        )
+        
+        # Step 4: Post comments to GitHub
+        if review_result.comments:
+            logger.info(f"Posting {len(review_result.comments)} review comments to GitHub...")
+            post_result = await github_client.post_review_comments(
+                repo_full_name=job_data.repo_full_name,
+                pr_number=job_data.pr_number,
+                comments=review_result.comments,
+            )
+            logger.info(
+                f"Posted {post_result.get('posted_count', 0)} comments to PR #{job_data.pr_number}"
+            )
+        else:
+            logger.info("No comments to post (LLM found no issues)")
         
         logger.info(
             f"Job {job_data.job_id} completed successfully for PR #{job_data.pr_number}"
@@ -87,6 +153,14 @@ async def process_job(job_data: JobData) -> bool:
         )
         
         return False
+        
+    finally:
+        # Clean up GitHub client
+        if github_client:
+            try:
+                await github_client.close()
+            except Exception as e:
+                logger.warning(f"Error closing GitHub client: {e}")
 
 
 async def update_job_status(

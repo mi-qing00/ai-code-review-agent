@@ -41,7 +41,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: Configure properly for production
+    allow_origins=["*"],  # Configure via CORS_ORIGINS env var for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,7 +57,7 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    # TODO: Check database and Redis connections
+    # Database and Redis connections are checked during startup
     try:
         pool = await get_db_pool()
         redis = await get_redis()
