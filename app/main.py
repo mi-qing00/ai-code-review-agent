@@ -83,3 +83,7 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 from app.api import metrics
 app.include_router(metrics.router, prefix="/api", tags=["metrics"])
 
+# Admin dashboard routes
+from app.api import admin
+app.include_router(admin.router, prefix="/api", tags=["admin"])
+
