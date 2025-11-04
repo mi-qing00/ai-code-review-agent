@@ -3,6 +3,7 @@
 import asyncio
 import json
 import signal
+import sys
 from datetime import datetime
 
 from app.core.logging import get_logger
@@ -149,6 +150,9 @@ async def consume_jobs() -> None:
             logger.warning(f"Error creating consumer group: {e}")
     
     logger.info(f"Starting consumer {CONSUMER_NAME} in group {CONSUMER_GROUP}")
+    print(f"👷 Consumer {CONSUMER_NAME} started in group {CONSUMER_GROUP}")
+    print(f"📋 Waiting for jobs from stream: {STREAM_NAME}")
+    print(f"🔄 Blocking for up to {BLOCK_TIME}ms when no messages...")
     
     current_job = None
     
@@ -167,6 +171,7 @@ async def consume_jobs() -> None:
                 
                 if not messages:
                     # No messages, continue waiting
+                    # This is normal - we're blocking, so we'll wait for new messages
                     continue
                 
                 # Process each message
@@ -237,9 +242,13 @@ async def consume_jobs() -> None:
                             
             except asyncio.CancelledError:
                 logger.info("Consumer loop cancelled")
+                print("⚠️  Consumer loop cancelled", file=sys.stderr)
                 break
             except Exception as e:
                 logger.error(f"Error in consumer loop: {e}", exc_info=True)
+                print(f"❌ Error in consumer loop: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc()
                 await asyncio.sleep(1)  # Brief pause before retrying
     
     finally:
@@ -290,15 +299,21 @@ async def run_worker() -> None:
     signal.signal(signal.SIGTERM, signal_handler)
     
     logger.info("Starting review worker...")
+    print("🚀 Review worker starting...")  # Also print to stdout for visibility
     
     try:
         await consume_jobs()
     except KeyboardInterrupt:
         logger.info("Worker interrupted by user")
+        print("⚠️  Worker interrupted by user")
     except Exception as e:
         logger.error(f"Worker error: {e}", exc_info=True)
+        print(f"❌ Worker error: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         logger.info("Worker stopped")
+        print("🛑 Worker stopped")
 
 
 # Worker can be run as:

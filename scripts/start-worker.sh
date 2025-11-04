@@ -57,5 +57,11 @@ echo -e "${GREEN}📝 Worker will process jobs from Redis Streams${NC}"
 echo -e "${GREEN}🛑 Press Ctrl+C to stop gracefully${NC}"
 echo ""
 
-poetry run python -m app.queue.consumer
+# Run worker with explicit error handling
+poetry run python -m app.queue.consumer 2>&1 || {
+    EXIT_CODE=$?
+    echo -e "${RED}❌ Worker exited with code: $EXIT_CODE${NC}"
+    echo -e "${YELLOW}💡 Check the error messages above for details${NC}"
+    exit $EXIT_CODE
+}
 
