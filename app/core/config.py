@@ -1,5 +1,9 @@
 """Application configuration."""
 
+import base64
+from pathlib import Path
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +23,7 @@ class Settings(BaseSettings):
     # GitHub App (recommended)
     github_app_id: str = ""
     github_app_private_key_path: str = ""
+    github_app_private_key_base64: Optional[str] = None  # For Railway deployment
     github_app_installation_id: str = ""
 
     # LLM Provider Selection
@@ -88,6 +93,45 @@ class Settings(BaseSettings):
                 f"Invalid LLM_PROVIDER: {provider}. "
                 "Must be one of: anthropic, openai, zhipu"
             )
+
+    def get_github_app_private_key(self) -> str:
+        """
+        Get GitHub App private key, handling both file and base64 env var.
+
+        Returns:
+            Private key content as string
+
+        Raises:
+            ValueError: If no private key is configured
+        """
+        # Priority 1: Base64 encoded (for Railway/deployment)
+        if self.github_app_private_key_base64:
+            try:
+                return base64.b64decode(self.github_app_private_key_base64).decode("utf-8")
+            except Exception as e:
+                raise ValueError(f"Failed to decode base64 private key: {e}")
+
+        # Priority 2: File path (for local development)
+        if self.github_app_private_key_path:
+            key_path = Path(self.github_app_private_key_path)
+            # Resolve relative paths relative to project root
+            if not key_path.is_absolute():
+                project_root = Path(__file__).parent.parent.parent
+                key_path = project_root / key_path
+
+            if not key_path.exists():
+                raise FileNotFoundError(
+                    f"GitHub App private key not found: {key_path}. "
+                    f"Check GITHUB_APP_PRIVATE_KEY_PATH setting."
+                )
+
+            with open(key_path, "r") as f:
+                return f.read()
+
+        raise ValueError(
+            "No GitHub App private key configured. "
+            "Set either GITHUB_APP_PRIVATE_KEY_PATH or GITHUB_APP_PRIVATE_KEY_BASE64"
+        )
 
 
 settings = Settings()

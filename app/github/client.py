@@ -44,25 +44,22 @@ class GitHubClient:
         installation_id = installation_id or settings.github_app_installation_id
 
         # Use App authentication if all App credentials are available
-        if app_id and private_key_path and installation_id:
+        # Check if we have either private_key_path or base64 encoded key
+        has_private_key = (
+            private_key_path
+            or settings.github_app_private_key_path
+            or settings.github_app_private_key_base64
+        )
+
+        if app_id and has_private_key and installation_id:
             self.app_id = app_id
             self.installation_id = installation_id
-            self.private_key_path = Path(private_key_path)
 
-            # Resolve relative paths relative to project root
-            if not self.private_key_path.is_absolute():
-                project_root = Path(__file__).parent.parent.parent
-                self.private_key_path = project_root / self.private_key_path
-
-            # Read private key
-            if not self.private_key_path.exists():
-                raise FileNotFoundError(
-                    f"GitHub App private key not found: {self.private_key_path}. "
-                    f"Check GITHUB_APP_PRIVATE_KEY_PATH setting."
-                )
-
-            with open(self.private_key_path, "r") as f:
-                self.private_key = f.read()
+            # Get private key using the new method (supports both file and base64)
+            try:
+                self.private_key = settings.get_github_app_private_key()
+            except (ValueError, FileNotFoundError) as e:
+                raise ValueError(f"Failed to load GitHub App private key: {e}")
 
             self._installation_token: Optional[str] = None
             self._token_expires_at: Optional[datetime] = None
@@ -79,8 +76,10 @@ class GitHubClient:
             missing = []
             if not app_id:
                 missing.append("GITHUB_APP_ID")
-            if not private_key_path:
-                missing.append("GITHUB_APP_PRIVATE_KEY_PATH")
+            if not has_private_key:
+                missing.append(
+                    "GITHUB_APP_PRIVATE_KEY_PATH or GITHUB_APP_PRIVATE_KEY_BASE64"
+                )
             if not installation_id:
                 missing.append("GITHUB_APP_INSTALLATION_ID")
             logger.warning(

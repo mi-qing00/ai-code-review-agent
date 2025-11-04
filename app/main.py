@@ -65,7 +65,7 @@ async def health_check():
         await redis.ping()
         return {
             "status": "healthy",
-            "database": "connected",
+            "postgres": "connected",
             "redis": "connected",
         }
     except Exception as e:
