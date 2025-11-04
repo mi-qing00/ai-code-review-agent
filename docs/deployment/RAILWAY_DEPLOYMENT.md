@@ -38,13 +38,22 @@ This copies the base64-encoded key to your clipboard. You'll paste it into Railw
 ### 2.2 Add PostgreSQL Database
 
 1. Click "New" → "Database" → "PostgreSQL"
-2. Railway automatically creates `DATABASE_URL` environment variable
-3. Note: The database will be provisioned automatically
+2. **Important:** After creating the database, you must link it to your web service:
+   - Click on your web service
+   - Go to "Settings" → "Variables"
+   - Railway should automatically show the database service
+   - Click "Reference" next to the PostgreSQL service to link it
+3. Railway automatically creates `DATABASE_URL` environment variable when linked
+4. Note: The database will be provisioned automatically
 
 ### 2.3 Add Redis Database
 
 1. Click "New" → "Database" → "Redis"
-2. Railway automatically creates `REDIS_URL` environment variable
+2. **Important:** Link Redis to your web service:
+   - Click on your web service
+   - Go to "Settings" → "Variables"
+   - Click "Reference" next to the Redis service to link it
+3. Railway automatically creates `REDIS_URL` environment variable when linked
 
 ### 2.4 Configure Web Service
 

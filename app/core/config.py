@@ -4,6 +4,7 @@ import base64
 from pathlib import Path
 from typing import Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,10 +12,20 @@ class Settings(BaseSettings):
     """Application settings."""
 
     # Database
-    database_url: str
+    # Railway automatically provides DATABASE_URL
+    database_url: str = Field(
+        ...,
+        validation_alias="DATABASE_URL",
+        description="PostgreSQL connection string (Railway provides DATABASE_URL automatically)",
+    )
 
     # Redis
-    redis_url: str = "redis://localhost:6379/0"
+    # Railway automatically provides REDIS_URL
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias="REDIS_URL",
+        description="Redis connection string (Railway provides REDIS_URL automatically)",
+    )
 
     # GitHub
     github_webhook_secret: str = "your_webhook_secret_here"
