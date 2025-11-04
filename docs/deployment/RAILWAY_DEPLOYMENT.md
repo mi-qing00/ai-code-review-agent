@@ -38,22 +38,13 @@ This copies the base64-encoded key to your clipboard. You'll paste it into Railw
 ### 2.2 Add PostgreSQL Database
 
 1. Click "New" → "Database" → "PostgreSQL"
-2. **Important:** After creating the database, you must link it to your web service:
-   - Click on your web service
-   - Go to "Settings" → "Variables"
-   - Railway should automatically show the database service
-   - Click "Reference" next to the PostgreSQL service to link it
-3. Railway automatically creates `DATABASE_URL` environment variable when linked
-4. Note: The database will be provisioned automatically
+2. Railway automatically creates `DATABASE_URL` environment variable
+3. Note: The database will be provisioned automatically
 
 ### 2.3 Add Redis Database
 
 1. Click "New" → "Database" → "Redis"
-2. **Important:** Link Redis to your web service:
-   - Click on your web service
-   - Go to "Settings" → "Variables"
-   - Click "Reference" next to the Redis service to link it
-3. Railway automatically creates `REDIS_URL` environment variable when linked
+2. Railway automatically creates `REDIS_URL` environment variable
 
 ### 2.4 Configure Web Service
 
@@ -101,7 +92,41 @@ The worker runs as a separate service on Railway.
 
 ### 3.2 Configure Worker Service
 
-1. **Variables:** Copy all environment variables from the web service
+1. **Variables:** Copy all environment variables from the web service. The worker needs access to the same configuration:
+
+   **Required Environment Variables:**
+   ```bash
+   # Database (automatically provided by Railway PostgreSQL service)
+   DATABASE_URL=postgresql://...
+
+   # Redis (automatically provided by Railway Redis service)
+   REDIS_URL=redis://...
+
+   # LLM Provider
+   LLM_PROVIDER=zhipu
+   ZHIPU_API_KEY=your_zhipu_key_here
+   ZHIPU_MODEL=glm-4.6
+
+   # GitHub App (for posting comments)
+   GITHUB_APP_ID=2230451
+   GITHUB_APP_INSTALLATION_ID=92935491
+   GITHUB_APP_PRIVATE_KEY_BASE64=<base64_encoded_key>
+
+   # GitHub Webhook (for webhook verification - also needed by worker for some operations)
+   GITHUB_WEBHOOK_SECRET=your_webhook_secret_here
+
+   # App Settings
+   LOG_LEVEL=INFO
+   ENVIRONMENT=production
+   ```
+
+   **How to copy variables:**
+   - Go to web service → "Variables" → "Raw Editor"
+   - Copy all variables
+   - Go to worker service → "Variables" → "Raw Editor"
+   - Paste all variables
+   - Or manually add each variable one by one
+
 2. **Settings** → **Start Command:** `python -m app.queue.consumer`
 3. **Settings** → **Restart Policy:** "Always"
 
