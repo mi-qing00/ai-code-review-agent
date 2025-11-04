@@ -1,7 +1,7 @@
 """Job data models for queue system."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ class JobData(BaseModel):
     pr_id: int
     pr_number: int
     repo_full_name: str
-    enqueued_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    enqueued_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     attempt_count: int = 0
     status: str = "queued"
     metadata: dict = Field(default_factory=dict)

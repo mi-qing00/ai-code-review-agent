@@ -1,7 +1,7 @@
 """Job producer - enqueue jobs to Redis Streams."""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.core.logging import get_logger
 from app.db.redis_client import get_redis
@@ -47,11 +47,11 @@ async def enqueue_review_job(
         
         # Add metadata
         if "webhook_received_at" not in job_data.metadata:
-            job_data.metadata["webhook_received_at"] = datetime.utcnow().isoformat()
+            job_data.metadata["webhook_received_at"] = datetime.now(UTC).isoformat()
         
         # Serialize job data to JSON
         job_dict = job_data.model_dump()
-        job_dict["enqueued_at"] = datetime.utcnow().isoformat()
+        job_dict["enqueued_at"] = datetime.now(UTC).isoformat()
         
         # Add to Redis Stream using XADD
         # MAXLEN to prevent unbounded growth

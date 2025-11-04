@@ -4,7 +4,7 @@ import asyncio
 import json
 import signal
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.core.logging import get_logger
 from app.db.connection import get_db_pool
@@ -51,7 +51,7 @@ async def process_job(job_data: JobData) -> bool:
             job_data.pr_id,
             job_data.job_id,
             "processing",
-            processing_started_at=datetime.utcnow(),
+            processing_started_at=datetime.now(UTC),
         )
         
         # TODO: Implement actual PR review logic (Week 4)
@@ -67,7 +67,7 @@ async def process_job(job_data: JobData) -> bool:
             job_data.pr_id,
             job_data.job_id,
             "completed",
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(UTC),
         )
         
         return True
@@ -315,7 +315,7 @@ async def move_to_dead_letter(job_data: JobData) -> None:
             "pr_id": str(job_data.pr_id),
             "pr_number": str(job_data.pr_number),
             "repo": job_data.repo_full_name,
-            "failed_at": datetime.utcnow().isoformat(),
+            "failed_at": datetime.now(UTC).isoformat(),
         },
     )
     
