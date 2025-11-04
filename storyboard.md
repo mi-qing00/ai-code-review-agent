@@ -544,7 +544,7 @@ respx = "^0.20.0"  # HTTP mocking
 
 ### 相关链接
 
-- **GitHub 仓库:** https://github.com/mi-qing00/ai-code-review-agent
+- **GitHub 仓库:** https://github.com/kaitlynmi/ai-code-review-agent
 - **本地应用:** http://localhost:8000
 - **API 文档:** http://localhost:8000/docs
 - **管理仪表板:** http://localhost:8000/admin
