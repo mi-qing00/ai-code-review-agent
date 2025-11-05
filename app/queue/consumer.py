@@ -347,10 +347,15 @@ async def consume_jobs() -> None:
     print("📥 consume_jobs() called", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
     
+    # Immediately signal that worker is ready (for Railway health checks)
+    print("✅ Worker initialized and ready", file=sys.stderr)
+    print("✅ Worker initialized and ready", file=sys.stdout)
+    
     print("🔌 Connecting to Redis...", file=sys.stderr)
     try:
         redis = await get_redis()
         print("✅ Redis connection established", file=sys.stderr)
+        print("✅ Redis connection established", file=sys.stdout)
     except Exception as e:
         print(f"❌ Redis connection failed: {e}", file=sys.stderr)
         import traceback
@@ -372,9 +377,11 @@ async def consume_jobs() -> None:
             logger.warning(f"Error creating consumer group: {e}")
     
     logger.info(f"Starting consumer {CONSUMER_NAME} in group {CONSUMER_GROUP}")
-    print(f"👷 Consumer {CONSUMER_NAME} started in group {CONSUMER_GROUP}")
-    print(f"📋 Waiting for jobs from stream: {STREAM_NAME}")
-    print(f"🔄 Blocking for up to {BLOCK_TIME}ms when no messages...")
+    print(f"👷 Consumer {CONSUMER_NAME} started in group {CONSUMER_GROUP}", file=sys.stderr)
+    print(f"👷 Consumer {CONSUMER_NAME} started in group {CONSUMER_GROUP}", file=sys.stdout)
+    print(f"📋 Waiting for jobs from stream: {STREAM_NAME}", file=sys.stderr)
+    print(f"🔄 Blocking for up to {BLOCK_TIME}ms when no messages...", file=sys.stderr)
+    print("🚀 Worker is running and ready to process jobs", file=sys.stdout)
     
     current_job = None
     

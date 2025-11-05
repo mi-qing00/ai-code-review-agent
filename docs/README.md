@@ -22,9 +22,9 @@
 - **[演示仓库 README 模板](./demo/DEMO_REPOSITORY_README.md)** - 演示仓库的 README 模板
 - **[自动审查 vs 手动测试](./demo/AUTO_VS_MANUAL_REVIEW.md)** - 自动工作流程与测试脚本的区别
 
-### 设计与架构 (根目录)
-- **[Job Queue 设计](./JOB_QUEUE_DESIGN.md)** - 任务队列系统设计文档
-- **[Admin Dashboard](./ADMIN_DASHBOARD.md)** - 管理仪表板说明
+### 部署指南 (deployment/)
+- **[Railway 部署指南](./deployment/RAILWAY_DEPLOYMENT.md)** - 完整的 Railway 部署步骤
+- **[Railway Worker 配置](./deployment/RAILWAY_WORKER_CONFIG.md)** - Worker 服务配置和故障排查
 
 ## 🚀 快速开始
 
