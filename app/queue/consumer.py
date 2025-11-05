@@ -20,12 +20,6 @@ else:
     # Fallback for older Python versions
     os.environ.setdefault('PYTHONUNBUFFERED', '1')
 
-try:
-    from aiohttp import web
-    AIOHTTP_AVAILABLE = True
-except ImportError:
-    AIOHTTP_AVAILABLE = False
-
 from app.core.logging import get_logger
 from app.db.connection import get_db_pool
 from app.db.redis_client import get_redis
@@ -41,6 +35,9 @@ MAX_RETRIES = 3
 
 # Graceful shutdown flag
 shutdown_requested = False
+
+# Health check server (global for cleanup)
+_health_runner = None
 
 
 def signal_handler(signum, frame):
@@ -615,27 +612,30 @@ async def move_to_dead_letter(job_data: JobData) -> None:
         )
 
 
-async def health_check_handler(request):
-    """Simple health check endpoint for Railway."""
-    return web.Response(text="healthy", status=200)
-
-
 async def start_health_server():
-    """Start minimal HTTP server for Railway healthchecks."""
-    if not AIOHTTP_AVAILABLE:
-        logger.warning("aiohttp not available, skipping health check server")
-        return None
+    """Start minimal HTTP server for health checks."""
+    global _health_runner
     
-    # Only start health server if PORT is set (Railway will set this)
-    port = os.getenv('PORT')
-    if not port:
-        logger.info("PORT not set, skipping health check server (not needed for local dev)")
+    # Only start health server if PORT is set (Railway provides this)
+    port_str = os.getenv('PORT')
+    if not port_str:
+        logger.info("PORT not set, skipping health check server")
+        print("ℹ️  PORT not set, health check server disabled", file=sys.stderr)
+        sys.stderr.flush()
         return None
     
     try:
-        port = int(port)
+        from aiohttp import web
+        
+        port = int(port_str)
+        
+        async def health_check(request):
+            """Simple health check endpoint for Railway"""
+            return web.Response(text="OK", status=200)
+        
         app = web.Application()
-        app.router.add_get('/health', health_check_handler)
+        app.router.add_get('/health', health_check)
+        app.router.add_get('/', health_check)  # Railway might check root too
         
         runner = web.AppRunner(app)
         await runner.setup()
@@ -643,12 +643,18 @@ async def start_health_server():
         site = web.TCPSite(runner, '0.0.0.0', port)
         await site.start()
         
-        logger.info(f"Health check server started on port {port}")
+        _health_runner = runner
+        logger.info("Health check server started", port=port)
         print(f"✅ Health check server started on port {port}", file=sys.stderr)
         sys.stderr.flush()
         return runner
+    except ImportError:
+        logger.warning("aiohttp not available, health check server disabled")
+        print("⚠️  aiohttp not available, health check server disabled", file=sys.stderr)
+        sys.stderr.flush()
+        return None
     except Exception as e:
-        logger.warning(f"Failed to start health check server: {e}")
+        logger.error(f"Failed to start health check server: {e}", exc_info=True)
         print(f"⚠️  Failed to start health check server: {e}", file=sys.stderr)
         sys.stderr.flush()
         return None
@@ -656,6 +662,8 @@ async def start_health_server():
 
 async def run_worker() -> None:
     """Run the worker process."""
+    global _health_runner
+    
     # Early output to ensure Railway sees logs
     print("=" * 60, file=sys.stdout)
     print("🚀 Worker process starting...", file=sys.stdout)
@@ -667,22 +675,18 @@ async def run_worker() -> None:
     print("=" * 60, file=sys.stderr)
     sys.stderr.flush()
     
-    # Start health check server (for Railway)
-    health_runner = None
-    try:
-        health_runner = await start_health_server()
-    except Exception as e:
-        logger.warning(f"Error starting health server: {e}")
-        print(f"⚠️  Error starting health server: {e}", file=sys.stderr)
-        sys.stderr.flush()
-    
     # Setup signal handlers
     try:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
         print("✅ Signal handlers registered", file=sys.stderr)
+        sys.stderr.flush()
     except Exception as e:
         print(f"⚠️  Signal handler setup warning: {e}", file=sys.stderr)
+        sys.stderr.flush()
+    
+    # Start health check server if PORT is set
+    health_runner = await start_health_server()
     
     logger.info("Starting review worker...")
     print("🚀 Review worker starting...", file=sys.stderr)
@@ -695,27 +699,35 @@ async def run_worker() -> None:
         sys.stderr.flush()
         await consume_jobs()
         print("⚠️  consume_jobs() returned (unexpected)", file=sys.stderr)
+        sys.stderr.flush()
     except KeyboardInterrupt:
         logger.info("Worker interrupted by user")
         print("⚠️  Worker interrupted by user", file=sys.stderr)
+        sys.stderr.flush()
     except Exception as e:
         logger.error(f"Worker error: {e}", exc_info=True)
         print(f"❌ Worker error: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
+        sys.stderr.flush()
     finally:
-        # Cleanup health check server
+        # Cleanup health server
         if health_runner:
             try:
+                print("🛑 Stopping health check server...", file=sys.stderr)
+                sys.stderr.flush()
                 await health_runner.cleanup()
                 logger.info("Health check server stopped")
-                print("🛑 Health check server stopped", file=sys.stderr)
+                print("✅ Health check server stopped", file=sys.stderr)
                 sys.stderr.flush()
             except Exception as e:
                 logger.warning(f"Error stopping health server: {e}")
+                print(f"⚠️  Error stopping health server: {e}", file=sys.stderr)
+                sys.stderr.flush()
         
         logger.info("Worker stopped")
         print("🛑 Worker stopped", file=sys.stderr)
+        sys.stderr.flush()
 
 
 # Worker can be run as:
