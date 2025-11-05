@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.db.connection import close_db_pool, get_db_pool
+from app.db.migrations import check_migration_status, run_migrations
 from app.db.redis_client import close_redis, get_redis
 
 # Setup logging
@@ -20,8 +21,18 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     logger.info("Starting application...")
-    await get_db_pool()
+    pool = await get_db_pool()
     await get_redis()
+    
+    # Run database migrations if needed
+    logger.info("Checking database migration status...")
+    if not await check_migration_status(pool):
+        logger.info("Database tables not found. Running migrations...")
+        await run_migrations(pool)
+        logger.info("✅ Database migrations completed")
+    else:
+        logger.info("✅ Database schema is up to date")
+    
     logger.info("Application started")
     yield
     # Shutdown

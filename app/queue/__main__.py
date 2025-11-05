@@ -4,10 +4,15 @@ import asyncio
 import sys
 import os
 
+# Ensure unbuffered output for Railway logging
+os.environ.setdefault('PYTHONUNBUFFERED', '1')
+
 # Print to both stdout and stderr for visibility
 def log(msg):
     print(msg, file=sys.stderr)
     print(msg, file=sys.stdout)
+    sys.stdout.flush()
+    sys.stderr.flush()
 
 log("=" * 60)
 log("🔧 Worker startup - Step 1: Initializing...")

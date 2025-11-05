@@ -2,9 +2,23 @@
 
 import asyncio
 import json
+import os
 import signal
 import sys
 from datetime import UTC, datetime
+
+# Force unbuffered output for Railway logging
+# Set PYTHONUNBUFFERED in environment or use flush() calls
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
+    except Exception:
+        # Fallback: ensure unbuffered via environment
+        os.environ.setdefault('PYTHONUNBUFFERED', '1')
+else:
+    # Fallback for older Python versions
+    os.environ.setdefault('PYTHONUNBUFFERED', '1')
 
 from app.core.logging import get_logger
 from app.db.connection import get_db_pool
@@ -21,6 +35,9 @@ MAX_RETRIES = 3
 
 # Graceful shutdown flag
 shutdown_requested = False
+
+# Health check server (global for cleanup)
+_health_runner = None
 
 
 def signal_handler(signum, frame):
@@ -51,94 +68,256 @@ async def process_job(job_data: JobData) -> bool:
 
     github_client = None
     try:
+        print(
+            f"\n{'='*60}",
+            file=sys.stderr
+        )
+        print(
+            f"🔄 Processing job {job_data.job_id} for PR #{job_data.pr_number} "
+            f"from {job_data.repo_full_name} (attempt {job_data.attempt_count + 1})",
+            file=sys.stderr
+        )
+        print(f"{'='*60}", file=sys.stderr)
+        sys.stderr.flush()
         logger.info(
             f"Processing job {job_data.job_id} for PR #{job_data.pr_number} "
             f"from {job_data.repo_full_name} (attempt {job_data.attempt_count + 1})"
         )
         
         # Update status to processing
+        # Convert UTC-aware datetime to naive UTC for TIMESTAMP column
+        processing_time = datetime.now(UTC).replace(tzinfo=None)
         await update_job_status(
             job_data.pr_id,
             job_data.job_id,
             "processing",
-            processing_started_at=datetime.now(UTC),
+            processing_started_at=processing_time,
         )
         
         # Initialize GitHub client (use App auth if available, otherwise fallback to PAT)
         from app.core.config import settings
 
+        print("[INIT] Initializing GitHub client...", file=sys.stderr)
+        sys.stderr.flush()
         if (
             settings.github_app_id
             and settings.github_app_private_key_path
             and settings.github_app_installation_id
         ):
+            print(f"[INIT] Using GitHub App auth (App ID: {settings.github_app_id})", file=sys.stderr)
+            sys.stderr.flush()
             github_client = GitHubClient(
                 app_id=settings.github_app_id,
                 private_key_path=settings.github_app_private_key_path,
                 installation_id=settings.github_app_installation_id,
             )
         else:
+            print("[INIT] Using Personal Access Token (PAT)", file=sys.stderr)
+            sys.stderr.flush()
             logger.warning(
                 "GitHub App credentials not configured, using PAT (not recommended)"
             )
             github_client = GitHubClient(token=settings.github_token)
         
+        print("[INIT] ✅ GitHub client initialized successfully", file=sys.stderr)
+        sys.stderr.flush()
+        
         # Step 1: Fetch PR diff from GitHub
-        logger.info(f"Fetching diff for PR #{job_data.pr_number} from {job_data.repo_full_name}")
-        diff_context = await github_client.fetch_pr_diff(
-            repo_full_name=job_data.repo_full_name,
+        print(f"[STEP 1] Fetching diff for PR #{job_data.pr_number} from {job_data.repo_full_name}", file=sys.stderr)
+        sys.stderr.flush()
+        logger.info(
+            f"[STEP 1] Fetching diff for PR #{job_data.pr_number} from {job_data.repo_full_name}",
+            step="fetching_diff",
             pr_number=job_data.pr_number,
+            repo=job_data.repo_full_name,
         )
-        logger.info(
-            f"Fetched diff: {len(diff_context.changed_files)} files changed, "
-            f"{diff_context.additions} additions, {diff_context.deletions} deletions"
-        )
-        
-        # Step 2: Get LLM provider
-        llm_provider = get_llm_provider()
-        logger.info(f"Using LLM provider: {llm_provider.provider_name} ({llm_provider.model})")
-        
-        # Step 3: Analyze diff with LLM
-        logger.info("Analyzing diff with LLM...")
-        review_result = await llm_provider.analyze_diff(
-            diff_text=diff_context.diff_text,
-            context=diff_context,
-        )
-        logger.info(
-            f"LLM analysis completed: {len(review_result.comments)} comments, "
-            f"{review_result.tokens_used} tokens, ${review_result.cost:.4f} cost, "
-            f"{review_result.processing_time:.2f}s"
-        )
-        
-        # Step 4: Post comments to GitHub
-        if review_result.comments:
-            logger.info(f"Posting {len(review_result.comments)} review comments to GitHub...")
-            post_result = await github_client.post_review_comments(
+        try:
+            diff_context = await github_client.fetch_pr_diff(
                 repo_full_name=job_data.repo_full_name,
                 pr_number=job_data.pr_number,
-                comments=review_result.comments,
             )
+            print(
+                f"[STEP 1] ✅ Fetched diff: {len(diff_context.changed_files)} files, "
+                f"+{diff_context.additions}/-{diff_context.deletions}, "
+                f"size: {len(diff_context.diff_text)} chars",
+                file=sys.stderr
+            )
+            sys.stderr.flush()
             logger.info(
-                f"Posted {post_result.get('posted_count', 0)} comments to PR #{job_data.pr_number}"
+                f"[STEP 1] Fetched diff successfully",
+                step="fetching_diff",
+                files_changed=len(diff_context.changed_files),
+                additions=diff_context.additions,
+                deletions=diff_context.deletions,
+                diff_size=len(diff_context.diff_text),
             )
-        else:
-            logger.info("No comments to post (LLM found no issues)")
+        except Exception as e:
+            print(f"[STEP 1] ❌ Failed to fetch diff: {e}", file=sys.stderr)
+            sys.stderr.flush()
+            logger.error(
+                f"[STEP 1] Failed to fetch diff: {e}",
+                step="fetching_diff",
+                error=str(e),
+                exc_info=True,
+            )
+            raise
         
+        # Step 2: Get LLM provider
+        print("[STEP 2] Getting LLM provider", file=sys.stderr)
+        sys.stderr.flush()
+        logger.info(
+            "[STEP 2] Getting LLM provider",
+            step="initializing_llm",
+        )
+        try:
+            llm_provider = get_llm_provider()
+            print(
+                f"[STEP 2] ✅ LLM provider initialized: {llm_provider.provider_name} ({llm_provider.model})",
+                file=sys.stderr
+            )
+            sys.stderr.flush()
+            logger.info(
+                f"[STEP 2] LLM provider initialized",
+                step="initializing_llm",
+                provider=llm_provider.provider_name,
+                model=llm_provider.model,
+            )
+        except Exception as e:
+            print(f"[STEP 2] ❌ Failed to initialize LLM provider: {e}", file=sys.stderr)
+            sys.stderr.flush()
+            logger.error(
+                f"[STEP 2] Failed to initialize LLM provider: {e}",
+                step="initializing_llm",
+                error=str(e),
+                exc_info=True,
+            )
+            raise
+        
+        # Step 3: Analyze diff with LLM
+        print(f"[STEP 3] Starting LLM analysis (diff length: {len(diff_context.diff_text)} chars)", file=sys.stderr)
+        sys.stderr.flush()
+        logger.info(
+            "[STEP 3] Starting LLM analysis",
+            step="calling_llm",
+            diff_length=len(diff_context.diff_text),
+        )
+        try:
+            review_result = await llm_provider.analyze_diff(
+                diff_text=diff_context.diff_text,
+                context=diff_context,
+            )
+            print(
+                f"[STEP 3] ✅ LLM analysis completed: {len(review_result.comments)} comments, "
+                f"{review_result.tokens_used} tokens, ${review_result.cost:.4f}, "
+                f"{review_result.processing_time:.2f}s",
+                file=sys.stderr
+            )
+            sys.stderr.flush()
+            logger.info(
+                f"[STEP 3] LLM analysis completed",
+                step="calling_llm",
+                comments_count=len(review_result.comments),
+                tokens_used=review_result.tokens_used,
+                cost=review_result.cost,
+                processing_time=review_result.processing_time,
+            )
+        except Exception as e:
+            print(f"[STEP 3] ❌ LLM analysis failed: {e}", file=sys.stderr)
+            sys.stderr.flush()
+            logger.error(
+                f"[STEP 3] LLM analysis failed: {e}",
+                step="calling_llm",
+                error=str(e),
+                exc_info=True,
+            )
+            raise
+        
+        # Step 4: Parse comments (if needed)
+        print(f"[STEP 4] Parsing review comments: {len(review_result.comments)} comments", file=sys.stderr)
+        sys.stderr.flush()
+        logger.info(
+            "[STEP 4] Parsing review comments",
+            step="parsed_comments",
+            comments_count=len(review_result.comments),
+        )
+        
+        # Step 5: Post comments to GitHub
+        if review_result.comments:
+            print(f"[STEP 5] Posting {len(review_result.comments)} review comments to GitHub", file=sys.stderr)
+            sys.stderr.flush()
+            logger.info(
+                f"[STEP 5] Posting {len(review_result.comments)} review comments to GitHub",
+                step="posting_comments",
+                comments_count=len(review_result.comments),
+            )
+            try:
+                post_result = await github_client.post_review_comments(
+                    repo_full_name=job_data.repo_full_name,
+                    pr_number=job_data.pr_number,
+                    comments=review_result.comments,
+                )
+                posted_count = post_result.get('posted_count', 0)
+                print(
+                    f"[STEP 5] ✅ Posted {posted_count}/{len(review_result.comments)} comments to PR #{job_data.pr_number}",
+                    file=sys.stderr
+                )
+                sys.stderr.flush()
+                logger.info(
+                    f"[STEP 5] Posted comments successfully",
+                    step="posting_comments",
+                    posted_count=posted_count,
+                    total_comments=len(review_result.comments),
+                )
+            except Exception as e:
+                print(f"[STEP 5] ❌ Failed to post comments: {e}", file=sys.stderr)
+                sys.stderr.flush()
+                logger.error(
+                    f"[STEP 5] Failed to post comments: {e}",
+                    step="posting_comments",
+                    error=str(e),
+                    exc_info=True,
+                )
+                raise
+        else:
+            print("[STEP 5] No comments to post (LLM found no issues)", file=sys.stderr)
+            sys.stderr.flush()
+            logger.info(
+                "[STEP 5] No comments to post (LLM found no issues)",
+                step="posting_comments",
+                comments_count=0,
+            )
+        
+        print(
+            f"✅ Job {job_data.job_id} completed successfully for PR #{job_data.pr_number}",
+            file=sys.stderr
+        )
+        sys.stderr.flush()
         logger.info(
             f"Job {job_data.job_id} completed successfully for PR #{job_data.pr_number}"
         )
         
         # Update status to completed
+        # Convert UTC-aware datetime to naive UTC for TIMESTAMP column
+        completed_time = datetime.now(UTC).replace(tzinfo=None)
         await update_job_status(
             job_data.pr_id,
             job_data.job_id,
             "completed",
-            completed_at=datetime.now(UTC),
+            completed_at=completed_time,
         )
         
         return True
         
     except Exception as e:
+        # Print error to console with full traceback
+        print(f"\n{'='*60}", file=sys.stderr)
+        print(f"❌ ERROR processing job {job_data.job_id}: {e}", file=sys.stderr)
+        print(f"{'='*60}", file=sys.stderr)
+        sys.stderr.flush()
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        
         logger.error(
             f"Error processing job {job_data.job_id}: {e}",
             exc_info=True,
@@ -181,11 +360,21 @@ async def update_job_status(
         param_idx = 2
         
         if processing_started_at:
+            # Convert to timezone-naive UTC datetime for TIMESTAMP column
+            if processing_started_at.tzinfo is not None:
+                # If timezone-aware, convert to UTC then remove timezone info
+                processing_started_at = processing_started_at.astimezone(UTC).replace(tzinfo=None)
+            # If already naive, assume it's UTC and use as-is
             update_fields.append(f"processing_started_at = ${param_idx}")
             params.append(processing_started_at)
             param_idx += 1
         
         if completed_at:
+            # Convert to timezone-naive UTC datetime for TIMESTAMP column
+            if completed_at.tzinfo is not None:
+                # If timezone-aware, convert to UTC then remove timezone info
+                completed_at = completed_at.astimezone(UTC).replace(tzinfo=None)
+            # If already naive, assume it's UTC and use as-is
             update_fields.append(f"completed_at = ${param_idx}")
             params.append(completed_at)
             param_idx += 1
@@ -211,10 +400,20 @@ async def consume_jobs() -> None:
     print("📥 consume_jobs() called", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
     
+    # Immediately signal that worker is ready (for Railway health checks)
+    print("✅ Worker initialized and ready", file=sys.stderr)
+    print("✅ Worker initialized and ready", file=sys.stdout)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    
     print("🔌 Connecting to Redis...", file=sys.stderr)
+    sys.stderr.flush()
     try:
         redis = await get_redis()
         print("✅ Redis connection established", file=sys.stderr)
+        print("✅ Redis connection established", file=sys.stdout)
+        sys.stdout.flush()
+        sys.stderr.flush()
     except Exception as e:
         print(f"❌ Redis connection failed: {e}", file=sys.stderr)
         import traceback
@@ -236,9 +435,15 @@ async def consume_jobs() -> None:
             logger.warning(f"Error creating consumer group: {e}")
     
     logger.info(f"Starting consumer {CONSUMER_NAME} in group {CONSUMER_GROUP}")
-    print(f"👷 Consumer {CONSUMER_NAME} started in group {CONSUMER_GROUP}")
-    print(f"📋 Waiting for jobs from stream: {STREAM_NAME}")
-    print(f"🔄 Blocking for up to {BLOCK_TIME}ms when no messages...")
+    print(f"👷 Consumer {CONSUMER_NAME} started in group {CONSUMER_GROUP}", file=sys.stderr)
+    print(f"👷 Consumer {CONSUMER_NAME} started in group {CONSUMER_GROUP}", file=sys.stdout)
+    print(f"📋 Waiting for jobs from stream: {STREAM_NAME}", file=sys.stderr)
+    print(f"🔄 Blocking for up to {BLOCK_TIME}ms when no messages...", file=sys.stderr)
+    print("🚀 Worker is running and ready to process jobs", file=sys.stdout)
+    print("=" * 60, file=sys.stdout)
+    print("✅ Worker is fully operational", file=sys.stdout)
+    sys.stdout.flush()
+    sys.stderr.flush()
     
     current_job = None
     
@@ -407,39 +612,122 @@ async def move_to_dead_letter(job_data: JobData) -> None:
         )
 
 
+async def start_health_server():
+    """Start minimal HTTP server for health checks."""
+    global _health_runner
+    
+    # Only start health server if PORT is set (Railway provides this)
+    port_str = os.getenv('PORT')
+    if not port_str:
+        logger.info("PORT not set, skipping health check server")
+        print("ℹ️  PORT not set, health check server disabled", file=sys.stderr)
+        sys.stderr.flush()
+        return None
+    
+    try:
+        from aiohttp import web
+        
+        port = int(port_str)
+        
+        async def health_check(request):
+            """Simple health check endpoint for Railway"""
+            return web.Response(text="OK", status=200)
+        
+        app = web.Application()
+        app.router.add_get('/health', health_check)
+        app.router.add_get('/', health_check)  # Railway might check root too
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        
+        _health_runner = runner
+        logger.info("Health check server started", port=port)
+        print(f"✅ Health check server started on port {port}", file=sys.stderr)
+        sys.stderr.flush()
+        return runner
+    except ImportError:
+        logger.warning("aiohttp not available, health check server disabled")
+        print("⚠️  aiohttp not available, health check server disabled", file=sys.stderr)
+        sys.stderr.flush()
+        return None
+    except Exception as e:
+        logger.error(f"Failed to start health check server: {e}", exc_info=True)
+        print(f"⚠️  Failed to start health check server: {e}", file=sys.stderr)
+        sys.stderr.flush()
+        return None
+
+
 async def run_worker() -> None:
     """Run the worker process."""
+    global _health_runner
+    
+    # Early output to ensure Railway sees logs
+    print("=" * 60, file=sys.stdout)
+    print("🚀 Worker process starting...", file=sys.stdout)
+    print("=" * 60, file=sys.stdout)
+    sys.stdout.flush()
+    
     print("=" * 60, file=sys.stderr)
     print("🔧 run_worker() called", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
+    sys.stderr.flush()
     
     # Setup signal handlers
     try:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
         print("✅ Signal handlers registered", file=sys.stderr)
+        sys.stderr.flush()
     except Exception as e:
         print(f"⚠️  Signal handler setup warning: {e}", file=sys.stderr)
+        sys.stderr.flush()
+    
+    # Start health check server if PORT is set
+    health_runner = await start_health_server()
     
     logger.info("Starting review worker...")
     print("🚀 Review worker starting...", file=sys.stderr)
     print("🚀 Review worker starting...", file=sys.stdout)
+    sys.stdout.flush()
+    sys.stderr.flush()
     
     try:
         print("📞 Calling consume_jobs()...", file=sys.stderr)
+        sys.stderr.flush()
         await consume_jobs()
         print("⚠️  consume_jobs() returned (unexpected)", file=sys.stderr)
+        sys.stderr.flush()
     except KeyboardInterrupt:
         logger.info("Worker interrupted by user")
         print("⚠️  Worker interrupted by user", file=sys.stderr)
+        sys.stderr.flush()
     except Exception as e:
         logger.error(f"Worker error: {e}", exc_info=True)
         print(f"❌ Worker error: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
+        sys.stderr.flush()
     finally:
+        # Cleanup health server
+        if health_runner:
+            try:
+                print("🛑 Stopping health check server...", file=sys.stderr)
+                sys.stderr.flush()
+                await health_runner.cleanup()
+                logger.info("Health check server stopped")
+                print("✅ Health check server stopped", file=sys.stderr)
+                sys.stderr.flush()
+            except Exception as e:
+                logger.warning(f"Error stopping health server: {e}")
+                print(f"⚠️  Error stopping health server: {e}", file=sys.stderr)
+                sys.stderr.flush()
+        
         logger.info("Worker stopped")
         print("🛑 Worker stopped", file=sys.stderr)
+        sys.stderr.flush()
 
 
 # Worker can be run as:

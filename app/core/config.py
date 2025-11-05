@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     # App Settings
     log_level: str = "INFO"
     environment: str = "development"
+    app_url: str = "https://web-production-4a236.up.railway.app"  # Railway deployment URL
 
     model_config = SettingsConfigDict(
         env_file=".env",

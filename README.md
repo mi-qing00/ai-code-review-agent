@@ -67,9 +67,13 @@ cp .env.example .env
 # Create database
 createdb code_review_db
 
-# Run migrations
+# Run migrations (migrations run automatically on app startup)
+# Or manually:
 psql -d code_review_db -f migrations/001_initial_schema.sql
+psql -d code_review_db -f migrations/002_add_job_tracking.sql
 ```
+
+**Note:** The application automatically runs migrations on startup if tables don't exist.
 
 ### 4. Run Redis
 
@@ -131,6 +135,12 @@ The worker will:
 - Process PR review jobs asynchronously
 - Update job status in the database
 - Handle retries and failures gracefully
+- Start health check server on PORT (if set) for Railway deployment
+
+**For Railway Deployment:**
+- Worker automatically detects `PORT` environment variable
+- Starts minimal HTTP server on `/health` endpoint for Railway health checks
+- See `docs/deployment/RAILWAY_DEPLOYMENT.md` for detailed setup instructions
 
 ### 7. Testing
 

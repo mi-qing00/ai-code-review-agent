@@ -1,8 +1,12 @@
 [build]
 builder = "NIXPACKS"
 
-[deploy]
-startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10
+# Note: For multiple services, configure per-service in Railway dashboard:
+# - Start Command: Use "bash scripts/railway_start.sh" with SERVICE_TYPE env var
+# - Restart Policy: Configure per service (web: ON_FAILURE, worker: ALWAYS)
+# - These settings are now configured per-service in Railway dashboard, not globally
+
+# [deploy] section removed - configure per-service in Railway dashboard:
+# - Web service: Restart Policy = "ON_FAILURE" (default)
+# - Worker service: Restart Policy = "ALWAYS" (required for continuous processing)
 

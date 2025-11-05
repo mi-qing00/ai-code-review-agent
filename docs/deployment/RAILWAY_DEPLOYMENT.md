@@ -39,7 +39,8 @@ This copies the base64-encoded key to your clipboard. You'll paste it into Railw
 
 1. Click "New" → "Database" → "PostgreSQL"
 2. Railway automatically creates `DATABASE_URL` environment variable
-3. Note: The database will be provisioned automatically
+3. **Database migrations run automatically**: When the web service starts, it will automatically check if database tables exist and run migrations if needed. You don't need to manually run SQL migrations.
+4. Note: The database will be provisioned automatically
 
 ### 2.3 Add Redis Database
 
@@ -77,7 +78,7 @@ ENVIRONMENT=production
 
 1. Click on your web service
 2. Go to "Settings" → "Generate Domain"
-3. You'll get a URL like: `https://ai-code-review-agent-production.up.railway.app`
+3. You'll get a URL like: `https://web-production-4a236.up.railway.app`
 4. Copy this URL - you'll need it for Step 4
 
 ## Step 3: Deploy Worker Process
@@ -92,9 +93,102 @@ The worker runs as a separate service on Railway.
 
 ### 3.2 Configure Worker Service
 
-1. **Variables:** Copy all environment variables from the web service
-2. **Settings** → **Start Command:** `python -m app.queue.consumer`
-3. **Settings** → **Restart Policy:** "Always"
+1. **Variables:** Copy all environment variables from the web service. The worker needs access to the same configuration:
+
+   **Required Environment Variables:**
+   ```bash
+   # Database (automatically provided by Railway PostgreSQL service)
+   DATABASE_URL=postgresql://...
+
+   # Redis (automatically provided by Railway Redis service)
+   REDIS_URL=redis://...
+
+   # LLM Provider
+   LLM_PROVIDER=zhipu
+   ZHIPU_API_KEY=your_zhipu_key_here
+   ZHIPU_MODEL=glm-4.6
+
+   # GitHub App (for posting comments)
+   GITHUB_APP_ID=2230451
+   GITHUB_APP_INSTALLATION_ID=92935491
+   GITHUB_APP_PRIVATE_KEY_BASE64=<base64_encoded_key>
+
+   # GitHub Webhook (for webhook verification - also needed by worker for some operations)
+   GITHUB_WEBHOOK_SECRET=your_webhook_secret_here
+
+   # App Settings
+   LOG_LEVEL=INFO
+   ENVIRONMENT=production
+   ```
+
+   **How to copy variables:**
+   - Go to web service → "Variables" → "Raw Editor"
+   - Copy all variables
+   - Go to worker service → "Variables" → "Raw Editor"
+   - Paste all variables
+   - Or manually add each variable one by one
+
+2. **Settings** → **Start Command:** 
+   
+   **Solution: Use Startup Script with Environment Variable**
+   
+   Railway's `railway.toml` may lock the start command. Use the provided startup script:
+   
+   **For Worker Service:**
+   - Go to worker service → "Settings" → "Start Command"
+   - Set to: `bash scripts/railway_start.sh`
+   - Go to "Variables" → Add environment variable:
+     - Key: `SERVICE_TYPE`
+     - Value: `worker`
+   
+   **⚠️ CRITICAL: Configure Health Check for Worker Service**
+   
+   The worker now includes a minimal HTTP health check server!
+   
+   **In Railway Dashboard → Worker Service → Settings:**
+   
+   1. **Health Check Path**: Set to `/health`
+   
+   2. **Environment Variables:**
+      ```
+      SERVICE_TYPE=worker
+      PORT=<Railway will auto-set this, or you can set it manually>
+      ```
+   
+   **How it works:**
+   - Worker automatically detects `PORT` environment variable
+   - If `PORT` exists, starts a minimal HTTP server on that port
+   - Health check endpoint `/health` returns `200 OK` with text "OK"
+   - Railway will call `http://localhost:$PORT/health` to verify worker is running
+   - If `PORT` is not set, health server won't start (fine for local development)
+   
+   **Note**: 
+   - ✅ Worker now has HTTP health check endpoint, Railway won't kill it
+   - ✅ Health check server only listens on `/health` and `/`, very lightweight
+   - ✅ Doesn't affect worker's main functionality (processing Redis queue jobs)
+   
+   **For Web Service (if needed):**
+   - Go to web service → "Settings" → "Start Command"  
+   - Set to: `bash scripts/railway_start.sh`
+   - The script will automatically detect it's a web service from the `PORT` environment variable
+   - Or explicitly set: `SERVICE_TYPE=web`
+   
+   **Alternative: Direct Command (if script doesn't work)**
+   - If the start command field is locked, try using Railway's "Override" feature
+   - Or use Pre-Deploy step to set it dynamically
+   - Or manually set: `python -m app.queue.consumer` directly in the start command field
+
+3. **Settings** → **Restart Policy:** 
+   
+   **Important:** Set to "Always" for worker service
+   
+   - Go to worker service → "Settings" → "Restart Policy"
+   - Select: **"Always"** (not "On Failure")
+   - This ensures the worker automatically restarts if it crashes or stops
+   - Worker must run continuously to process jobs from the queue
+   
+   **Note:** If restart policy is locked, it may be because `railway.toml` was setting it globally.
+   The updated `railway.toml` no longer sets restart policy, so you should be able to configure it per service.
 
 ### 3.3 Deploy Worker
 
@@ -110,7 +204,7 @@ Railway will automatically deploy when you push to GitHub.
 2. Navigate to "Webhook" section
 3. Update **Webhook URL** to your Railway URL:
    ```
-   https://ai-code-review-agent-production.up.railway.app/webhooks/github
+   https://web-production-4a236.up.railway.app/webhooks/github
    ```
 4. Click "Save changes"
 
@@ -119,7 +213,7 @@ Railway will automatically deploy when you push to GitHub.
 ### 5.1 Check Health Endpoint
 
 ```bash
-curl https://ai-code-review-agent-production.up.railway.app/health
+curl https://web-production-4a236.up.railway.app/health
 ```
 
 Expected response:
@@ -147,6 +241,22 @@ Expected response:
 3. Verify worker processes the job
 
 ## Troubleshooting
+
+### Issue: Database tables not found (`relation "pull_requests" does not exist`)
+
+**Cause:** Database migrations haven't run yet.
+
+**Solution:**
+- Migrations run automatically on web service startup. Check the logs for messages like:
+  - `Checking database migration status...`
+  - `Database tables not found. Running migrations...`
+  - `✅ Database migrations completed`
+- If migrations don't run automatically, you can manually trigger them by restarting the web service.
+- **Manual migration (if needed):** Connect to Railway PostgreSQL and run:
+  ```bash
+  railway connect postgres
+  ```
+  Then run the migration files from `migrations/` directory.
 
 ### Issue: Health check fails
 
