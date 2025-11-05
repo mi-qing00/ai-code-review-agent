@@ -39,7 +39,8 @@ This copies the base64-encoded key to your clipboard. You'll paste it into Railw
 
 1. Click "New" → "Database" → "PostgreSQL"
 2. Railway automatically creates `DATABASE_URL` environment variable
-3. Note: The database will be provisioned automatically
+3. **Database migrations run automatically**: When the web service starts, it will automatically check if database tables exist and run migrations if needed. You don't need to manually run SQL migrations.
+4. Note: The database will be provisioned automatically
 
 ### 2.3 Add Redis Database
 
@@ -214,6 +215,22 @@ Expected response:
 3. Verify worker processes the job
 
 ## Troubleshooting
+
+### Issue: Database tables not found (`relation "pull_requests" does not exist`)
+
+**Cause:** Database migrations haven't run yet.
+
+**Solution:**
+- Migrations run automatically on web service startup. Check the logs for messages like:
+  - `Checking database migration status...`
+  - `Database tables not found. Running migrations...`
+  - `✅ Database migrations completed`
+- If migrations don't run automatically, you can manually trigger them by restarting the web service.
+- **Manual migration (if needed):** Connect to Railway PostgreSQL and run:
+  ```bash
+  railway connect postgres
+  ```
+  Then run the migration files from `migrations/` directory.
 
 ### Issue: Health check fails
 
