@@ -204,13 +204,19 @@ GitHub Webhook → FastAPI → Redis Queue → Worker Pool → GitHub
 **Deliverable:** System proven to handle 50+ PRs, <5s p95 latency
 
 ### Week 11: Real Usage
-- [ ] Deploy to Railway/Render
-- [ ] Install on your repositories
+- [x] Deploy to Railway/Render
+  - ✅ Railway web service deployed
+  - ✅ Railway worker service deployed with health check
+  - ✅ GitHub App webhook configured to Railway URL
+  - ✅ Database auto-migrations working
+  - ✅ Worker health check server integrated
+- [ ] Install on your repositories (in progress)
 - [ ] Review 50+ PRs across 3 projects
 - [ ] Collect data: bugs found, false positives, costs
 - [ ] Iterate on prompts based on feedback
 
-**Deliverable:** Real usage metrics and examples
+**Progress:** 50% complete ✅
+**Deliverable:** System deployed and running on Railway ✅
 
 ### Week 12: Documentation
 - [x] README (overview, architecture diagram, setup, examples)
